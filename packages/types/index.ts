@@ -178,8 +178,8 @@ export interface ProfileSpine {
   // Consent registry
   consent: {
     scopes: ConsentScope[];
-    grantedAt: Record<ConsentScope, string>;
-    revokedAt?: Record<ConsentScope, string>;
+    grantedAt: Partial<Record<ConsentScope, string>>;
+    revokedAt?: Partial<Record<ConsentScope, string>>;
   };
   
   // Policy references
