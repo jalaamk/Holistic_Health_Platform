@@ -10,6 +10,9 @@ import type { EntitlementCheckResult } from '@/packages/types';
 import type { DataStore } from '@/packages/providers/interfaces';
 import { getDataStore } from '@/packages/providers/firebase-datastore';
 
+// Constant for unlimited quota
+export const UNLIMITED_QUOTA = Number.POSITIVE_INFINITY;
+
 export interface EntitlementConfig {
   tenantId: string;
   plan: string;
@@ -222,9 +225,9 @@ export class EntitlementsService {
             'custom_retention',
           ],
           quotas: {
-            aiRequests: -1, // unlimited
-            storage: -1,
-            clients: -1,
+            aiRequests: UNLIMITED_QUOTA,
+            storage: UNLIMITED_QUOTA,
+            clients: UNLIMITED_QUOTA,
           },
         };
       
