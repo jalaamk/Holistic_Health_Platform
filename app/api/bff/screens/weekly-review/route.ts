@@ -134,9 +134,8 @@ async function handler(
   const movementService = getMovementService();
 
   // Fetch data from all domains in parallel
-  const [habits, todayCompletions, nutritionGoals, sleepStats, movementStats] = await Promise.all([
+  const [habits, nutritionGoals, sleepStats, movementStats] = await Promise.all([
     habitsService.listHabits(context.userId, context.tenantId, true),
-    habitsService.getTodayCompletions(context.userId, context.tenantId),
     nutritionService.getGoals(context.userId, context.tenantId),
     sleepService.calculateStats(context.userId, context.tenantId),
     movementService.calculateWeeklyStats(context.userId, context.tenantId),

@@ -8,7 +8,6 @@
 import { getEventBus } from '../core/event-bus';
 import { getDataStore } from '../providers/firebase-datastore';
 import { EventEnvelope } from '../providers/interfaces';
-import { DataClassification } from '../types';
 
 interface RewardsState {
   userId: string;

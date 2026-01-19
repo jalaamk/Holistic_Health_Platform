@@ -8,7 +8,6 @@
 import { getEventBus } from '../core/event-bus';
 import { getDataStore } from '../providers/firebase-datastore';
 import { EventEnvelope } from '../providers/interfaces';
-import { DataClassification } from '../types';
 
 export interface TimelineItem {
   id: string;
@@ -63,11 +62,8 @@ class TimelineProjectionService {
   /**
    * Get timeline for a user
    */
-  async getTimeline(userId: string, tenantId: string, limit = 50): Promise<TimelineItem[]> {
-    const dataStore = getDataStore();
-    const collection = `tenants/${tenantId}/users/${userId}/timeline`;
-    
-    // In a real implementation, this would query with ordering and limit
+  async getTimeline(userId: string, tenantId: string, _limit = 50): Promise<TimelineItem[]> {
+    // In a real implementation, this would query Firestore with ordering and limit
     // For now, we'll simulate fetching timeline entries
     const entries: TimelineEntry[] = [];
     
