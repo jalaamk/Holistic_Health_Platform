@@ -14,6 +14,10 @@ import { createApiHandler } from '@/packages/core/api-handler';
 import type { RequestContext } from '@/packages/types';
 import { getEntitlementsService } from '@/packages/core/entitlements';
 import { getPolicyConsentService } from '@/packages/core/policy-consent';
+import { getHabitsService } from '@/packages/domains/habits';
+import { getNutritionService } from '@/packages/domains/nutrition';
+import { getSleepService } from '@/packages/domains/sleep';
+import { getMovementService } from '@/packages/domains/movement';
 
 // Output ViewModel
 interface WeeklyReviewViewModel {
@@ -123,10 +127,174 @@ async function handler(
   const endOfWeek = new Date(startOfWeek);
   endOfWeek.setDate(startOfWeek.getDate() + 6);
 
-  // TODO: Fetch real data from multiple domains
+  // Initialize domain services
+  const habitsService = getHabitsService();
+  const nutritionService = getNutritionService();
+  const sleepService = getSleepService();
+  const movementService = getMovementService();
+
+  // Fetch data from all domains in parallel
+  const [habits, todayCompletions, nutritionGoals, sleepStats, movementStats] = await Promise.all([
+    habitsService.listHabits(context.tenantId, context.userId, true),
+    habitsService.getTodayCompletions(context.userId, context.tenantId),
+    nutritionService.getGoals(context.userId, context.tenantId),
+    sleepService.calculateStats(context.userId, context.tenantId),
+    movementService.calculateWeeklyStats(context.userId, context.tenantId),
+  ]);
+
+  // Calculate habit stats
+  const habitsWithStats = await Promise.all(
+    habits.map(async (habit) => {
+      const stats = await habitsService.calculateStats(habit.id, context.tenantId);
+      return { habit, stats };
+    })
+  );
+
+  const totalHabitsThisWeek = habits.length * 7;
+  const completedHabits = habitsWithStats.reduce((sum, h) => {
+    return sum + Math.round((h.stats.completionRate / 100) * 7);
+  }, 0);
+  const bestStreak = Math.max(...habitsWithStats.map(h => h.stats.currentStreak), 0);
+
+  // Calculate domain scores
+  const habitScore = habits.length > 0 
+    ? Math.round(habitsWithStats.reduce((sum, h) => sum + h.stats.completionRate, 0) / habits.length)
+    : 0;
+
+  const nutritionScore = nutritionGoals ? 85 : 50; // Simplified - could calculate based on adherence
+  const sleepScore = sleepStats.averageQuality ? Math.round(sleepStats.averageQuality * 20) : 0; // Scale 1-5 to 0-100
+  const movementScore = movementStats.weeklyWorkouts >= 3 ? 80 : Math.round((movementStats.weeklyWorkouts / 3) * 80);
+  const mindScore = 70; // Placeholder - would need Mind domain stats
+
+  // Calculate overall score
+  const overallScore = Math.round((habitScore + nutritionScore + sleepScore + movementScore + mindScore) / 5);
+  const adherenceRate = totalHabitsThisWeek > 0 
+    ? Math.round((completedHabits / totalHabitsThisWeek) * 100)
+    : 0;
+
+  // Generate highlights
+  const highlights: WeeklyReviewViewModel['highlights'] = [];
+  
+  if (bestStreak >= 7) {
+    highlights.push({
+      type: 'achievement',
+      title: `${bestStreak}-Day Streak!`,
+      description: 'Amazing consistency with your habits',
+      date: new Date().toISOString(),
+      icon: '🔥',
+    });
+  }
+
+  if (sleepStats.averageQuality >= 4) {
+    highlights.push({
+      type: 'improvement',
+      title: 'Excellent Sleep Quality',
+      description: `Average quality: ${sleepStats.averageQuality.toFixed(1)}/5`,
+      date: new Date().toISOString(),
+      icon: '😴',
+    });
+  }
+
+  if (movementStats.weeklyWorkouts >= 5) {
+    highlights.push({
+      type: 'milestone',
+      title: 'Active Week!',
+      description: `Completed ${movementStats.weeklyWorkouts} workouts`,
+      date: new Date().toISOString(),
+      icon: '💪',
+    });
+  }
+
+  // Generate insights
+  const insights: WeeklyReviewViewModel['insights'] = [];
+
+  if (habitScore >= 80) {
+    insights.push({
+      message: 'Your habit consistency is excellent this week!',
+      type: 'success',
+      domain: 'Habits',
+      aiGenerated: true,
+      explainability: {
+        reasonCodes: ['HIGH_COMPLETION_RATE', 'CONSISTENT_TRACKING'],
+        confidence: 0.92,
+        evidencePack: {
+          completionRate: habitScore,
+          activeHabits: habits.length,
+        },
+      },
+    });
+  }
+
+  if (sleepScore >= 80) {
+    insights.push({
+      message: 'Sleep quality is excellent. Your routine is working well!',
+      type: 'success',
+      domain: 'Sleep',
+      aiGenerated: true,
+      explainability: {
+        reasonCodes: ['HIGH_SLEEP_QUALITY', 'GOOD_CONSISTENCY'],
+        confidence: 0.88,
+        evidencePack: {
+          averageQuality: sleepStats.averageQuality,
+          consistency: sleepStats.consistency,
+        },
+      },
+    });
+  }
+
+  if (movementStats.weeklyWorkouts < 3) {
+    insights.push({
+      message: 'Consider adding more workouts to meet your movement goals.',
+      type: 'info',
+      domain: 'Movement',
+      aiGenerated: true,
+      explainability: {
+        reasonCodes: ['BELOW_TARGET_FREQUENCY'],
+        confidence: 0.85,
+        evidencePack: {
+          targetWorkouts: 3,
+          actualWorkouts: movementStats.weeklyWorkouts,
+        },
+      },
+    });
+  }
+
+  // Generate recommendations
+  const recommendations: WeeklyReviewViewModel['recommendations'] = [];
+
+  if (sleepScore >= 80) {
+    recommendations.push({
+      title: 'Maintain Sleep Routine',
+      description: 'Your consistent sleep schedule is working well. Keep it up!',
+      priority: 'high',
+      actionable: 'Continue current bedtime routine',
+      aiGenerated: true,
+    });
+  }
+
+  if (movementStats.weeklyWorkouts < 5) {
+    recommendations.push({
+      title: 'Increase Workout Frequency',
+      description: 'Adding 1-2 more workouts would optimize your fitness goals.',
+      priority: 'medium',
+      actionable: 'Schedule mid-week workout',
+      aiGenerated: true,
+    });
+  }
+
+  if (habits.length < 5) {
+    recommendations.push({
+      title: 'Build More Habits',
+      description: 'Consider adding habits in areas you want to improve.',
+      priority: 'low',
+      actionable: 'Create a new habit',
+      aiGenerated: true,
+    });
+  }
+
   const viewModel: WeeklyReviewViewModel = {
     profile: {
-      displayName: 'User',
+      displayName: 'User', // TODO: Get from Profile Spine
       reviewPeriod: {
         startDate: startOfWeek.toISOString().split('T')[0],
         endDate: endOfWeek.toISOString().split('T')[0],
@@ -134,143 +302,67 @@ async function handler(
       },
     },
     summary: {
-      overallScore: 82,
-      adherenceRate: 78,
-      streak: 7,
-      completedGoals: 28,
-      totalGoals: 35,
+      overallScore,
+      adherenceRate,
+      streak: bestStreak,
+      completedGoals: completedHabits,
+      totalGoals: totalHabitsThisWeek,
     },
     domainScores: [
-      { domain: 'Nutrition', score: 88, change: 5, status: 'excellent' },
-      { domain: 'Movement', score: 75, change: -3, status: 'good' },
-      { domain: 'Sleep', score: 90, change: 10, status: 'excellent' },
-      { domain: 'Habits', score: 80, change: 2, status: 'good' },
-      { domain: 'Mind', score: 70, change: -5, status: 'needs_improvement' },
-    ],
-    highlights: [
-      {
-        type: 'achievement',
-        title: '7-Day Streak!',
-        description: 'Completed all habits for 7 consecutive days',
-        date: new Date().toISOString(),
-        icon: '🔥',
+      { 
+        domain: 'Nutrition', 
+        score: nutritionScore, 
+        change: 0, // Would need historical data
+        status: nutritionScore >= 80 ? 'excellent' : nutritionScore >= 60 ? 'good' : 'needs_improvement' 
       },
-      {
-        type: 'milestone',
-        title: '100 Workouts Milestone',
-        description: 'Reached 100 total workouts since joining',
-        date: new Date(Date.now() - 86400000).toISOString(),
-        icon: '💪',
+      { 
+        domain: 'Movement', 
+        score: movementScore, 
+        change: 0,
+        status: movementScore >= 80 ? 'excellent' : movementScore >= 60 ? 'good' : 'needs_improvement' 
       },
-      {
-        type: 'improvement',
-        title: 'Sleep Quality Up 15%',
-        description: 'Your sleep quality improved significantly this week',
-        date: new Date(Date.now() - 172800000).toISOString(),
-        icon: '😴',
+      { 
+        domain: 'Sleep', 
+        score: sleepScore, 
+        change: 0,
+        status: sleepScore >= 80 ? 'excellent' : sleepScore >= 60 ? 'good' : 'needs_improvement' 
       },
-    ],
-    insights: [
-      {
-        message: 'Your nutrition consistency improved by 5% this week.',
-        type: 'success',
-        domain: 'Nutrition',
-        aiGenerated: true,
-        explainability: {
-          reasonCodes: ['CONSISTENT_MEAL_LOGGING', 'MACRO_ADHERENCE_HIGH'],
-          confidence: 0.92,
-          evidencePack: {
-            mealsLoggedDaily: [3, 4, 3, 4, 3, 3, 4],
-            macroAdherenceRate: 0.88,
-          },
-        },
+      { 
+        domain: 'Habits', 
+        score: habitScore, 
+        change: 0,
+        status: habitScore >= 80 ? 'excellent' : habitScore >= 60 ? 'good' : 'needs_improvement' 
       },
-      {
-        message: 'Sleep quality increased significantly after consistent bedtime routine.',
-        type: 'success',
-        domain: 'Sleep',
-        aiGenerated: true,
-        explainability: {
-          reasonCodes: ['CONSISTENT_BEDTIME', 'IMPROVED_SLEEP_DURATION'],
-          confidence: 0.87,
-          evidencePack: {
-            averageBedtime: '22:30',
-            bedtimeConsistency: 0.9,
-          },
-        },
-      },
-      {
-        message: 'Consider increasing workout frequency to meet your movement goals.',
-        type: 'info',
-        domain: 'Movement',
-        aiGenerated: true,
-        explainability: {
-          reasonCodes: ['BELOW_TARGET_FREQUENCY'],
-          confidence: 0.85,
-          evidencePack: {
-            targetWorkouts: 5,
-            actualWorkouts: 3,
-          },
-        },
-      },
-      {
-        message: 'Mindfulness practice dropped this week. Try scheduling it in the morning.',
-        type: 'warning',
-        domain: 'Mind',
-        aiGenerated: true,
-        explainability: {
-          reasonCodes: ['DECREASED_FREQUENCY', 'EVENING_COMPLETION_PATTERN'],
-          confidence: 0.78,
-          evidencePack: {
-            completionRate: 0.6,
-            preferredTime: 'morning',
-          },
-        },
+      { 
+        domain: 'Mind', 
+        score: mindScore, 
+        change: 0,
+        status: mindScore >= 80 ? 'excellent' : mindScore >= 60 ? 'good' : 'needs_improvement' 
       },
     ],
-    recommendations: [
-      {
-        title: 'Maintain Sleep Routine',
-        description: 'Your consistent sleep schedule is working well. Keep it up!',
-        priority: 'high',
-        actionable: 'Set bedtime reminder for 10:00 PM',
-        aiGenerated: true,
-      },
-      {
-        title: 'Add Mid-Week Workout',
-        description: 'Adding one workout on Wednesday would help reach your weekly goal.',
-        priority: 'medium',
-        actionable: 'Schedule Wednesday workout',
-        aiGenerated: true,
-      },
-      {
-        title: 'Morning Meditation',
-        description: 'Try moving your meditation practice to mornings for better consistency.',
-        priority: 'medium',
-        actionable: 'Update meditation habit time',
-        aiGenerated: true,
-      },
-    ],
+    highlights,
+    insights,
+    recommendations,
     dataPoints: {
       habits: {
-        completed: 28,
-        total: 35,
-        bestStreak: 21,
+        completed: completedHabits,
+        total: totalHabitsThisWeek,
+        bestStreak,
       },
       nutrition: {
-        mealsLogged: 24,
-        averageCalories: 1850,
-        macroAdherence: 88,
+        mealsLogged: 0, // Would need to query meals
+        averageCalories: nutritionGoals?.dailyCalories || 2000,
+        macroAdherence: nutritionScore,
       },
       movement: {
-        workouts: 3,
-        totalMinutes: 180,
-        caloriesBurned: 1200,
+        workouts: movementStats.weeklyWorkouts,
+        totalMinutes: movementStats.weeklyMinutes,
+        caloriesBurned: movementStats.weeklyCalories,
       },
       sleep: {
-        averageHours: 7.5,
-        quality: 90,
-        consistency: 85,
+        averageHours: sleepStats.averageDuration / 60, // Convert minutes to hours
+        quality: sleepScore,
+        consistency: Math.round(sleepStats.consistency * 100),
       },
     },
   };
