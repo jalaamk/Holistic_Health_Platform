@@ -144,7 +144,7 @@ class AIOrchestratorService {
 
       if (!quotaCheck.allowed) {
         throw new Error(
-          `AI quota exceeded: ${quotaCheck.current}/${quotaCheck.limit} used`
+          `AI quota exceeded: ${quotaCheck.reason || 'Quota limit reached'}`
         );
       }
 

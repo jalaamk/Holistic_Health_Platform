@@ -1,4 +1,4 @@
-import { getOpenAIProvider } from '../providers/openai-provider';
+import { getAIProvider } from '../providers/openai-provider';
 import type { AIProvider, AICompletionRequest, AICompletionResponse } from '../providers/interfaces';
 
 // Provider configuration
@@ -90,13 +90,15 @@ class AIRouterService {
 
       // Build AI request
       const aiRequest: AICompletionRequest = {
+        promptId: request.task,
+        promptVersion: '1',
         model,
         messages: [{ role: 'user', content: request.prompt }],
         temperature: request.temperature ?? 0.7,
         maxTokens: request.maxTokens ?? 1000,
-        metadata: {
-          userId: request.context.userId,
-          tenantId: request.context.tenantId,
+        userId: request.context.userId,
+        tenantId: request.context.tenantId,
+        context: {
           traceId: request.context.traceId,
           requestId: request.context.requestId,
           task: request.task,
@@ -207,7 +209,7 @@ class AIRouterService {
   private getProviderInstance(providerId: string): AIProvider {
     // For now, only OpenAI is implemented
     if (providerId === 'openai') {
-      return getOpenAIProvider();
+      return getAIProvider();
     }
 
     throw new Error(`Provider not implemented: ${providerId}`);

@@ -168,10 +168,11 @@ class PromptRegistryService {
 
     // Check allowlist (if present, must be in list)
     if (flags.allowlist && flags.allowlist.length > 0) {
-      return (
+      const inAllowlist = Boolean(
         (context.tenantId && flags.allowlist.includes(context.tenantId)) ||
         (context.userId && flags.allowlist.includes(context.userId))
       );
+      return inAllowlist;
     }
 
     // Check percentage rollout (simple hash-based for consistency)
