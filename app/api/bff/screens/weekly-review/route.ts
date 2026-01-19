@@ -135,7 +135,7 @@ async function handler(
 
   // Fetch data from all domains in parallel
   const [habits, todayCompletions, nutritionGoals, sleepStats, movementStats] = await Promise.all([
-    habitsService.listHabits(context.tenantId, context.userId, true),
+    habitsService.listHabits(context.userId, context.tenantId, true),
     habitsService.getTodayCompletions(context.userId, context.tenantId),
     nutritionService.getGoals(context.userId, context.tenantId),
     sleepService.calculateStats(context.userId, context.tenantId),
@@ -161,10 +161,16 @@ async function handler(
     ? Math.round(habitsWithStats.reduce((sum, h) => sum + h.stats.completionRate, 0) / habits.length)
     : 0;
 
-  const nutritionScore = nutritionGoals ? 85 : 50; // Simplified - could calculate based on adherence
+  // Simplified nutrition score - could be enhanced with actual adherence calculation
+  const NUTRITION_SCORE_WITH_GOALS = 85;
+  const NUTRITION_SCORE_NO_GOALS = 50;
+  const nutritionScore = nutritionGoals ? NUTRITION_SCORE_WITH_GOALS : NUTRITION_SCORE_NO_GOALS;
+  
   const sleepScore = sleepStats.averageQuality ? Math.round(sleepStats.averageQuality * 20) : 0; // Scale 1-5 to 0-100
   const movementScore = movementStats.weeklyWorkouts >= 3 ? 80 : Math.round((movementStats.weeklyWorkouts / 3) * 80);
-  const mindScore = 70; // Placeholder - would need Mind domain stats
+  
+  // TODO: Integrate Mind domain service for actual mood and journaling stats
+  const mindScore = 70; // Placeholder - would calculate from Mind service
 
   // Calculate overall score
   const overallScore = Math.round((habitScore + nutritionScore + sleepScore + movementScore + mindScore) / 5);

@@ -86,7 +86,7 @@ async function handler(
   const habitsService = getHabitsService();
   
   // Get all active habits for user
-  const habits = await habitsService.listHabits(context.tenantId, context.userId, true);
+  const habits = await habitsService.listHabits(context.userId, context.tenantId, true);
   
   // Get today's completions
   const todayCompletions = await habitsService.getTodayCompletions(

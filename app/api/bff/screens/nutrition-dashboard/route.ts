@@ -130,8 +130,8 @@ async function handler(
   
   // Get daily summary
   const summary = await nutritionService.calculateDailySummary(
-    context.tenantId,
     context.userId,
+    context.tenantId,
     today
   );
   
@@ -139,8 +139,8 @@ async function handler(
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
   const meals = await nutritionService.listMeals(
-    context.tenantId,
     context.userId,
+    context.tenantId,
     yesterday.toISOString().split('T')[0],
     new Date().toISOString().split('T')[0]
   );
