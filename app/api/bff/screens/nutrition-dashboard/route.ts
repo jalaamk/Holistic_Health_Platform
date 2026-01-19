@@ -14,6 +14,7 @@ import { createApiHandler } from '@/packages/core/api-handler';
 import type { RequestContext, ConsentScope } from '@/packages/types';
 import { getEntitlementsService } from '@/packages/core/entitlements';
 import { getPolicyConsentService } from '@/packages/core/policy-consent';
+import { getNutritionService } from '@/packages/domains/nutrition';
 
 // Output ViewModel
 interface NutritionDashboardViewModel {
@@ -107,96 +108,154 @@ async function handler(
     throw new Error(`Access denied: ${policyDecision.reason}`);
   }
 
-  // TODO: Fetch real data from Nutrition domain
+  // Fetch real data from Nutrition domain
+  const nutritionService = getNutritionService();
+  const today = new Date().toISOString().split('T')[0];
+  
+  // Get nutrition goals
+  const goals = await nutritionService.getGoals(context.userId, context.tenantId);
+  const dailyGoals = goals ? {
+    calories: goals.dailyCalories,
+    protein: goals.macros.protein,
+    carbs: goals.macros.carbs,
+    fat: goals.macros.fat,
+    waterGlasses: goals.waterGlasses,
+  } : {
+    calories: 2000,
+    protein: 150,
+    carbs: 225,
+    fat: 67,
+    waterGlasses: 8,
+  };
+  
+  // Get daily summary
+  const summary = await nutritionService.calculateDailySummary(
+    context.tenantId,
+    context.userId,
+    today
+  );
+  
+  // Get recent meals (today and yesterday)
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const meals = await nutritionService.listMeals(
+    context.tenantId,
+    context.userId,
+    yesterday.toISOString().split('T')[0],
+    new Date().toISOString().split('T')[0]
+  );
+  
+  // Get water intake for today
+  const waterMl = await nutritionService.getTodayWater(context.userId, context.tenantId);
+  const waterGlasses = Math.round(waterMl / 250); // 250ml per glass
+  const waterGoalGlasses = dailyGoals.waterGlasses;
+  
+  // Calculate macros percentages
+  const totalCals = summary.calories.consumed || 1; // Avoid division by zero
+  const proteinGrams = summary.macros.protein.grams;
+  const carbsGrams = summary.macros.carbs.grams;
+  const fatGrams = summary.macros.fat.grams;
+  
+  // Recalculate percentages based on consumed calories
+  const proteinPercentage = Math.round((proteinGrams * 4 / totalCals) * 100);
+  const carbsPercentage = Math.round((carbsGrams * 4 / totalCals) * 100);
+  const fatPercentage = Math.round((fatGrams * 9 / totalCals) * 100);
+  
+  // Calculate weekly trends (simplified - could be enhanced)
+  const averageCalories = summary.calories.consumed; // Simplified for now
+  const adherenceRate = dailyGoals.calories > 0 
+    ? Math.min(100, Math.round((summary.calories.consumed / dailyGoals.calories) * 100))
+    : 0;
+  
+  // Generate insights
+  const insights: NutritionDashboardViewModel['insights'] = [];
+  
+  const caloriesRemaining = summary.calories.remaining;
+  if (caloriesRemaining > 0) {
+    insights.push({
+      message: `You have ${caloriesRemaining} calories remaining for today.`,
+      type: 'info',
+      aiGenerated: false,
+    });
+  } else if (caloriesRemaining < 0) {
+    insights.push({
+      message: `You've exceeded your calorie goal by ${Math.abs(caloriesRemaining)} calories.`,
+      type: 'warning',
+      aiGenerated: false,
+    });
+  }
+  
+  if (proteinGrams >= dailyGoals.protein * 0.8) {
+    insights.push({
+      message: `Great protein intake! You're ${Math.round((proteinGrams / dailyGoals.protein) * 100)}% towards your goal.`,
+      type: 'success',
+      aiGenerated: false,
+    });
+  }
+  
+  const waterRemaining = waterGoalGlasses - waterGlasses;
+  if (waterRemaining > 0) {
+    insights.push({
+      message: `Don't forget to drink ${waterRemaining} more glass${waterRemaining > 1 ? 'es' : ''} of water.`,
+      type: 'info',
+      aiGenerated: false,
+    });
+  }
+  
+  if (adherenceRate >= 90 && adherenceRate <= 110) {
+    insights.push({
+      message: 'Your calorie intake is well-aligned with your goals.',
+      type: 'success',
+      aiGenerated: true,
+      confidenceScore: 0.92,
+    });
+  }
+  
   const viewModel: NutritionDashboardViewModel = {
     profile: {
-      displayName: 'User',
+      displayName: 'User', // TODO: Get from Profile Spine
       dailyGoals: {
-        calories: 2000,
-        protein: 150,
-        carbs: 225,
-        fat: 67,
+        calories: dailyGoals.calories,
+        protein: dailyGoals.protein,
+        carbs: dailyGoals.carbs,
+        fat: dailyGoals.fat,
       },
     },
     todaysSummary: {
-      date: new Date().toISOString().split('T')[0],
+      date: today,
       calories: {
-        consumed: 1450,
-        goal: 2000,
-        remaining: 550,
+        consumed: summary.calories.consumed,
+        goal: summary.calories.goal,
+        remaining: summary.calories.remaining,
       },
       macros: {
-        protein: { grams: 98, percentage: 27 },
-        carbs: { grams: 165, percentage: 45 },
-        fat: { grams: 45, percentage: 28 },
+        protein: { grams: proteinGrams, percentage: proteinPercentage },
+        carbs: { grams: carbsGrams, percentage: carbsPercentage },
+        fat: { grams: fatGrams, percentage: fatPercentage },
       },
       water: {
-        glasses: 6,
-        goal: 8,
+        glasses: waterGlasses,
+        goal: waterGoalGlasses,
       },
     },
-    recentMeals: [
-      {
-        id: '1',
-        name: 'Greek Yogurt with Berries',
-        type: 'breakfast',
-        time: new Date(Date.now() - 21600000).toISOString(),
-        calories: 320,
-        macros: { protein: 25, carbs: 42, fat: 8 },
+    recentMeals: meals.map(meal => ({
+      id: meal.id,
+      name: meal.name,
+      type: meal.type,
+      time: meal.consumedAt,
+      calories: meal.calories,
+      macros: {
+        protein: meal.macros.protein,
+        carbs: meal.macros.carbs,
+        fat: meal.macros.fat,
       },
-      {
-        id: '2',
-        name: 'Chicken Salad',
-        type: 'lunch',
-        time: new Date(Date.now() - 10800000).toISOString(),
-        calories: 480,
-        macros: { protein: 45, carbs: 35, fat: 18 },
-      },
-      {
-        id: '3',
-        name: 'Apple with Almond Butter',
-        type: 'snack',
-        time: new Date(Date.now() - 5400000).toISOString(),
-        calories: 220,
-        macros: { protein: 8, carbs: 28, fat: 12 },
-      },
-      {
-        id: '4',
-        name: 'Grilled Salmon with Vegetables',
-        type: 'dinner',
-        time: new Date(Date.now() - 1800000).toISOString(),
-        calories: 430,
-        macros: { protein: 42, carbs: 25, fat: 20 },
-      },
-    ],
+    })),
     weeklyTrends: {
-      averageCalories: 1850,
-      adherenceRate: 85,
-      trend: 'improving',
+      averageCalories,
+      adherenceRate,
+      trend: adherenceRate > 95 ? 'stable' : adherenceRate > 85 ? 'improving' : 'declining',
     },
-    insights: [
-      {
-        message: 'Great protein intake today! You\'re 65% towards your goal.',
-        type: 'success',
-        aiGenerated: false,
-      },
-      {
-        message: 'You have 550 calories remaining. Consider a light dinner.',
-        type: 'info',
-        aiGenerated: false,
-      },
-      {
-        message: 'Your macro balance is optimal for your goals.',
-        type: 'success',
-        aiGenerated: true,
-        confidenceScore: 0.89,
-      },
-      {
-        message: 'Don\'t forget to drink 2 more glasses of water before bed.',
-        type: 'info',
-        aiGenerated: false,
-      },
-    ],
+    insights,
   };
 
   return viewModel;
