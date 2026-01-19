@@ -352,6 +352,79 @@ export class ProfileSpineService {
   }
 
   /**
+   * Calculate and update computed views from analytics data
+   */
+  async refreshComputedViews(
+    userId: string,
+    tenantId: string
+  ): Promise<SpinePatchResult> {
+    try {
+      // Import here to avoid circular dependency
+      const { getAnalyticsService } = await import('../projections/analytics');
+      const { getRewardsService } = await import('../projections/rewards');
+      
+      const analyticsService = getAnalyticsService();
+      const rewardsService = getRewardsService();
+      
+      // Get KPIs and rewards state
+      const kpis = await analyticsService.calculateKPIs(userId, tenantId);
+      const rewards = await rewardsService.getRewardsState(userId, tenantId);
+      
+      // Calculate adherence score (0-100)
+      const adherenceScore = Math.round(
+        (kpis.currentPeriod.habitCompletionRate * 0.4) +
+        (kpis.currentPeriod.activeDays / 7 * 100 * 0.4) +
+        (Math.min(rewards.level * 5, 20)) // Level contribution, capped at 20
+      );
+      
+      // Determine risk flags
+      const riskFlags: string[] = [];
+      if (kpis.currentPeriod.activeDays < 3) {
+        riskFlags.push('low_engagement');
+      }
+      if (kpis.trends.activityTrend < -20) {
+        riskFlags.push('declining_activity');
+      }
+      if (kpis.currentPeriod.avgDailySleepHours > 0 && kpis.currentPeriod.avgDailySleepHours < 6) {
+        riskFlags.push('insufficient_sleep');
+      }
+      if (kpis.currentPeriod.habitCompletionRate < 30) {
+        riskFlags.push('low_habit_adherence');
+      }
+      
+      // Build reason codes for explainability
+      const reasonCodes: string[] = [];
+      reasonCodes.push(`habit_completion_rate:${kpis.currentPeriod.habitCompletionRate.toFixed(1)}`);
+      reasonCodes.push(`active_days:${kpis.currentPeriod.activeDays}/7`);
+      reasonCodes.push(`level:${rewards.level}`);
+      reasonCodes.push(`streak:${rewards.currentStreak}`);
+      
+      // Build computed views matching the ProfileSpine interface
+      const computed = {
+        adherenceScore: {
+          value: adherenceScore,
+          confidence: 0.85,
+          reasonCodes,
+          computedAt: new Date().toISOString(),
+        },
+        riskFlags,
+      };
+      
+      return this.updateComputedViews(userId, tenantId, computed);
+    } catch (error) {
+      console.error('[ProfileSpineService] Error refreshing computed views:', error);
+      return {
+        success: false,
+        version: 0,
+        error: {
+          code: 'COMPUTE_FAILED',
+          message: `Failed to refresh computed views: ${error}`,
+        },
+      };
+    }
+  }
+
+  /**
    * Grant consent scope
    */
   async grantConsent(
