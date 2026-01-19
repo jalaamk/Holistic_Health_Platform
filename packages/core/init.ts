@@ -12,6 +12,7 @@ import { startEventBusProcessing, stopEventBusProcessing } from './event-bus';
 import { getTimelineService } from '../projections/timeline';
 import { getRewardsService } from '../projections/rewards';
 import { getAnalyticsService } from '../projections/analytics';
+import { getAIOrchestrator } from './ai-orchestrator';
 
 /**
  * Initialize all background services
@@ -35,6 +36,10 @@ export function initializeServices(): void {
   const analyticsService = getAnalyticsService();
   analyticsService.initialize();
   console.log('✓ Analytics projection initialized');
+  
+  const aiOrchestrator = getAIOrchestrator();
+  aiOrchestrator.initialize();
+  console.log('✓ AI Orchestrator initialized');
   
   // Future: Add other service initializations
   // - Background job schedulers
