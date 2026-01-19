@@ -14,6 +14,7 @@ import { createApiHandler } from '@/packages/core/api-handler';
 import type { RequestContext } from '@/packages/types';
 import { getEntitlementsService } from '@/packages/core/entitlements';
 import { getPolicyConsentService } from '@/packages/core/policy-consent';
+import { getHabitsService } from '@/packages/domains/habits';
 
 // Output ViewModel
 interface HabitsViewModel {
@@ -81,88 +82,128 @@ async function handler(
     throw new Error(`Access denied: ${policyDecision.reason}`);
   }
 
-  // TODO: Fetch real data from Habits domain
+  // Fetch real data from Habits domain
+  const habitsService = getHabitsService();
+  
+  // Get all active habits for user
+  const habits = await habitsService.listHabits(context.tenantId, context.userId, true);
+  
+  // Get today's completions
+  const todayCompletions = await habitsService.getTodayCompletions(
+    context.userId,
+    context.tenantId
+  );
+  const completionMap = new Map(todayCompletions.map(c => [c.habitId, c]));
+  
+  // Calculate stats for each habit
+  const habitsWithStats = await Promise.all(
+    habits.map(async (habit) => {
+      const stats = await habitsService.calculateStats(habit.id, context.tenantId);
+      const completion = completionMap.get(habit.id);
+      
+      return {
+        id: habit.id,
+        name: habit.name,
+        description: habit.description,
+        category: habit.category.charAt(0).toUpperCase() + habit.category.slice(1),
+        targetFrequency: habit.targetFrequency,
+        completed: !!completion,
+        completedAt: completion?.completedAt,
+        streak: stats.currentStreak,
+        stats,
+      };
+    })
+  );
+
+  // Calculate weekly progress
+  const totalHabitsPerWeek = habits.length * 7;
+  const weeklyCompletions = habitsWithStats.reduce((sum, h) => {
+    // Estimate based on completion rate
+    return sum + Math.round((h.stats.completionRate / 100) * 7);
+  }, 0);
+  const weeklyCompletionRate = totalHabitsPerWeek > 0 
+    ? Math.round((weeklyCompletions / totalHabitsPerWeek) * 100) 
+    : 0;
+
+  // Aggregate by category
+  const categoryMap = new Map<string, { count: number; totalRate: number }>();
+  habitsWithStats.forEach(h => {
+    const existing = categoryMap.get(h.category) || { count: 0, totalRate: 0 };
+    categoryMap.set(h.category, {
+      count: existing.count + 1,
+      totalRate: existing.totalRate + h.stats.completionRate,
+    });
+  });
+  
+  const categories = Array.from(categoryMap.entries()).map(([name, data]) => ({
+    name,
+    count: data.count,
+    completionRate: Math.round(data.totalRate / data.count),
+  }));
+
+  // Find best streak
+  const bestHabit = habitsWithStats.reduce((best, current) => 
+    current.streak > best.streak ? current : best
+  , habitsWithStats[0] || { name: 'None', streak: 0 });
+
+  // Generate insights
+  const insights: HabitsViewModel['insights'] = [];
+  const completedToday = habitsWithStats.filter(h => h.completed).length;
+  
+  if (completedToday === habits.length && habits.length > 0) {
+    insights.push({
+      message: `Perfect! You've completed all ${habits.length} habits today.`,
+      type: 'success',
+    });
+  } else if (completedToday > 0) {
+    insights.push({
+      message: `Great progress! ${completedToday} of ${habits.length} habits completed today.`,
+      type: 'success',
+    });
+  }
+
+  if (bestHabit && bestHabit.streak >= 7) {
+    insights.push({
+      message: `Your "${bestHabit.name}" habit has a ${bestHabit.streak}-day streak!`,
+      type: 'success',
+    });
+  }
+
+  const incompleteToday = habitsWithStats.filter(h => !h.completed);
+  if (incompleteToday.length > 0) {
+    insights.push({
+      message: `${incompleteToday.length} habit${incompleteToday.length > 1 ? 's' : ''} remaining for today.`,
+      type: 'info',
+      actionable: 'Complete your habits',
+    });
+  }
+
   const viewModel: HabitsViewModel = {
     profile: {
-      displayName: 'User',
-      streakDays: 7,
+      displayName: 'User', // TODO: Get from Profile Spine
+      streakDays: bestHabit?.streak || 0,
     },
-    todayHabits: [
-      {
-        id: '1',
-        name: 'Morning Meditation',
-        description: '10 minutes of mindfulness',
-        category: 'Mind',
-        targetFrequency: 'daily',
-        completed: true,
-        completedAt: new Date(Date.now() - 7200000).toISOString(),
-        streak: 14,
-      },
-      {
-        id: '2',
-        name: 'Drink 8 glasses of water',
-        category: 'Nutrition',
-        targetFrequency: 'daily',
-        completed: true,
-        completedAt: new Date(Date.now() - 3600000).toISOString(),
-        streak: 21,
-      },
-      {
-        id: '3',
-        name: 'Exercise 30 minutes',
-        description: 'Cardio or strength training',
-        category: 'Movement',
-        targetFrequency: 'daily',
-        completed: false,
-        streak: 5,
-      },
-      {
-        id: '4',
-        name: 'Evening journal',
-        category: 'Mind',
-        targetFrequency: 'daily',
-        completed: false,
-        streak: 10,
-      },
-      {
-        id: '5',
-        name: 'Read for 20 minutes',
-        category: 'Learning',
-        targetFrequency: 'daily',
-        completed: false,
-        streak: 3,
-      },
-    ],
+    todayHabits: habitsWithStats.map(h => ({
+      id: h.id,
+      name: h.name,
+      description: h.description,
+      category: h.category,
+      targetFrequency: h.targetFrequency,
+      completed: h.completed,
+      completedAt: h.completedAt,
+      streak: h.streak,
+    })),
     weeklyProgress: {
-      totalHabits: 35, // 5 habits × 7 days
-      completedCount: 28,
-      completionRate: 80, // (28/35) * 100
-      trend: 'up',
+      totalHabits: totalHabitsPerWeek,
+      completedCount: weeklyCompletions,
+      completionRate: weeklyCompletionRate,
+      trend: weeklyCompletionRate >= 75 ? 'up' : weeklyCompletionRate >= 50 ? 'stable' : 'down',
     },
-    categories: [
-      { name: 'Mind', count: 2, completionRate: 85 },
-      { name: 'Nutrition', count: 1, completionRate: 100 },
-      { name: 'Movement', count: 1, completionRate: 70 },
-      { name: 'Learning', count: 1, completionRate: 60 },
-    ],
-    insights: [
-      {
-        message: 'Great job! You\'re on a 7-day streak across all habits.',
-        type: 'success',
-      },
-      {
-        message: 'Your water intake habit has a 21-day streak - keep it up!',
-        type: 'success',
-      },
-      {
-        message: 'Consider completing your exercise habit to maintain momentum.',
-        type: 'info',
-        actionable: 'Log your workout now',
-      },
-    ],
+    categories,
+    insights,
     bestStreak: {
-      habitName: 'Drink 8 glasses of water',
-      days: 21,
+      habitName: bestHabit?.name || 'None',
+      days: bestHabit?.streak || 0,
     },
   };
 
