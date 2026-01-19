@@ -13,6 +13,7 @@ import { getTimelineService } from '../projections/timeline';
 import { getRewardsService } from '../projections/rewards';
 import { getAnalyticsService } from '../projections/analytics';
 import { getAIOrchestrator } from './ai-orchestrator';
+import { getIntegrationRegistry } from '../integrations/integration-registry';
 
 /**
  * Initialize all background services
@@ -40,6 +41,10 @@ export function initializeServices(): void {
   const aiOrchestrator = getAIOrchestrator();
   aiOrchestrator.initialize();
   console.log('✓ AI Orchestrator initialized');
+  
+  const integrationRegistry = getIntegrationRegistry();
+  integrationRegistry.initialize();
+  console.log('✓ Integration Registry initialized');
   
   // Future: Add other service initializations
   // - Background job schedulers
