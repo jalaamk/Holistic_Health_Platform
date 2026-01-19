@@ -12,6 +12,9 @@
 import { createApiHandler } from '@/packages/core/api-handler';
 import type { RequestContext } from '@/packages/types';
 import { getEntitlementsService } from '@/packages/core/entitlements';
+import { getHabitsService } from '@/packages/domains/habits';
+import { getTimelineService } from '@/packages/projections/timeline';
+import { getRewardsService } from '@/packages/projections/rewards';
 
 // Output ViewModel
 interface TodayViewModel {
@@ -78,68 +81,62 @@ async function handler(
     greeting = 'Good evening';
   }
 
+  // Fetch real data from services
+  const habitsService = getHabitsService();
+  const timelineService = getTimelineService();
+  const rewardsService = getRewardsService();
+
+  // Get today's habits
+  const habits = await habitsService.listHabits(context.userId, context.tenantId);
+  const todayCompletions = await habitsService.getTodayCompletions(context.userId, context.tenantId);
+  const completedIds = new Set(todayCompletions.map(c => c.habitId));
+
+  // Get timeline (last 10 items)
+  const timeline = await timelineService.getTimeline(context.userId, context.tenantId, 10);
+
+  // Get rewards state
+  const rewardsState = await rewardsService.getRewardsState(context.userId, context.tenantId);
+
   // Build ViewModel
-  // TODO: Fetch real data from domains
   const viewModel: TodayViewModel = {
     profile: {
-      displayName: 'User',
+      displayName: 'User', // TODO: Get from Profile Spine
       greeting,
     },
     plan: {
-      itemsDue: 3,
-      items: [
-        {
-          id: '1',
-          title: 'Morning meditation',
+      itemsDue: habits.filter(h => !completedIds.has(h.id)).length,
+      items: habits
+        .filter(h => !completedIds.has(h.id))
+        .slice(0, 5)
+        .map(h => ({
+          id: h.id,
+          title: h.name,
           type: 'habit',
           dueAt: new Date().toISOString(),
-        },
-        {
-          id: '2',
-          title: 'Log breakfast',
-          type: 'nutrition',
-          dueAt: new Date().toISOString(),
-        },
-        {
-          id: '3',
-          title: 'Evening walk',
-          type: 'movement',
-          dueAt: new Date().toISOString(),
-        },
-      ],
+        })),
     },
     habits: {
-      completed: 2,
-      total: 5,
-      items: [
-        { id: '1', name: 'Morning meditation', completed: true },
-        { id: '2', name: 'Drink water', completed: true },
-        { id: '3', name: 'Exercise', completed: false },
-        { id: '4', name: 'Journal', completed: false },
-        { id: '5', name: 'Read', completed: false },
-      ],
+      completed: todayCompletions.length,
+      total: habits.length,
+      items: habits.slice(0, 5).map(h => ({
+        id: h.id,
+        name: h.name,
+        completed: completedIds.has(h.id),
+      })),
     },
-    timeline: [
-      {
-        id: '1',
-        type: 'habit.completed',
-        title: 'Completed morning meditation',
-        occurredAt: new Date(Date.now() - 3600000).toISOString(),
-      },
-      {
-        id: '2',
-        type: 'nutrition.meal.logged',
-        title: 'Logged breakfast',
-        occurredAt: new Date(Date.now() - 7200000).toISOString(),
-      },
-    ],
+    timeline: timeline.map(item => ({
+      id: item.id,
+      type: item.type,
+      title: item.title,
+      occurredAt: item.timestamp,
+    })),
     rewards: {
-      streak: 7,
-      xp: 2450,
-      level: 5,
+      streak: rewardsState.currentStreak,
+      xp: rewardsState.xp,
+      level: rewardsState.level,
     },
     notifications: {
-      unread: 2,
+      unread: 0, // TODO: Implement notification service
     },
   };
 

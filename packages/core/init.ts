@@ -9,6 +9,8 @@
  */
 
 import { startEventBusProcessing, stopEventBusProcessing } from './event-bus';
+import { getTimelineService } from '../projections/timeline';
+import { getRewardsService } from '../projections/rewards';
 
 /**
  * Initialize all background services
@@ -20,7 +22,17 @@ export function initializeServices(): void {
   startEventBusProcessing();
   console.log('✓ Event Bus processing started');
   
+  // Initialize projection subscribers
+  const timelineService = getTimelineService();
+  timelineService.initialize();
+  console.log('✓ Timeline projection initialized');
+  
+  const rewardsService = getRewardsService();
+  rewardsService.initialize();
+  console.log('✓ Rewards projection initialized');
+  
   // Future: Add other service initializations
+  // - Analytics aggregation
   // - Background job schedulers
   // - Cache warming
   // - Metrics collection
