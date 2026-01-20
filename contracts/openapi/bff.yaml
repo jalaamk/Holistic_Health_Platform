@@ -1,0 +1,449 @@
+openapi: 3.0.3
+info:
+  title: WellnessOS BFF API
+  version: 1.0.0
+  description: Backend-for-Frontend API providing screen ViewModels for WellnessOS
+  contact:
+    name: WellnessOS Team
+    email: support@wellnessos.com
+
+servers:
+  - url: http://localhost:3000/api/bff
+    description: Local development
+  - url: https://api.wellnessos.com/bff
+    description: Production
+
+paths:
+  /screens/today:
+    get:
+      summary: Today screen ViewModel
+      description: Returns all data needed to render the Today screen
+      operationId: getTodayScreen
+      tags:
+        - Screens
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Today screen data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TodayViewModel'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /screens/nutrition-dashboard:
+    get:
+      summary: Nutrition dashboard ViewModel
+      description: Returns all data needed to render the Nutrition dashboard
+      operationId: getNutritionDashboard
+      tags:
+        - Screens
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Nutrition dashboard data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NutritionDashboardViewModel'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /screens/habits:
+    get:
+      summary: Habits screen ViewModel
+      description: Returns all data needed to render the Habits screen
+      operationId: getHabitsScreen
+      tags:
+        - Screens
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Habits screen data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HabitsViewModel'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    # Common types
+    ApiResponse:
+      type: object
+      required:
+        - success
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+        error:
+          $ref: '#/components/schemas/ApiError'
+        metadata:
+          $ref: '#/components/schemas/ResponseMetadata'
+
+    ApiError:
+      type: object
+      required:
+        - code
+        - message
+        - traceId
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+        traceId:
+          type: string
+
+    ResponseMetadata:
+      type: object
+      required:
+        - requestId
+        - timestamp
+        - latencyMs
+        - version
+      properties:
+        requestId:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        latencyMs:
+          type: number
+        version:
+          type: string
+
+    # ViewModels
+    TodayViewModel:
+      type: object
+      required:
+        - profile
+        - planItems
+        - habits
+        - timeline
+        - rewards
+        - notifications
+      properties:
+        profile:
+          $ref: '#/components/schemas/ProfileSnapshot'
+        planItems:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanItem'
+        habits:
+          type: array
+          items:
+            $ref: '#/components/schemas/HabitItem'
+        timeline:
+          type: array
+          items:
+            $ref: '#/components/schemas/TimelineItem'
+        rewards:
+          $ref: '#/components/schemas/RewardsSummary'
+        notifications:
+          $ref: '#/components/schemas/NotificationState'
+
+    NutritionDashboardViewModel:
+      type: object
+      required:
+        - profile
+        - todaysMeals
+        - goalProgress
+        - recentActivity
+        - insights
+      properties:
+        profile:
+          $ref: '#/components/schemas/ProfileNutritionSlice'
+        todaysMeals:
+          type: array
+          items:
+            $ref: '#/components/schemas/MealSummary'
+        goalProgress:
+          $ref: '#/components/schemas/GoalProgress'
+        recentActivity:
+          type: array
+          items:
+            $ref: '#/components/schemas/TimelineItem'
+        insights:
+          $ref: '#/components/schemas/AiInsightPack'
+
+    HabitsViewModel:
+      type: object
+      required:
+        - profile
+        - habits
+        - streaks
+        - insights
+      properties:
+        profile:
+          $ref: '#/components/schemas/ProfileSnapshot'
+        habits:
+          type: array
+          items:
+            $ref: '#/components/schemas/HabitDetail'
+        streaks:
+          type: array
+          items:
+            $ref: '#/components/schemas/StreakInfo'
+        insights:
+          $ref: '#/components/schemas/AiInsightPack'
+
+    # Domain types
+    ProfileSnapshot:
+      type: object
+      required:
+        - userId
+        - displayName
+        - timezone
+      properties:
+        userId:
+          type: string
+        displayName:
+          type: string
+        timezone:
+          type: string
+        preferences:
+          type: object
+
+    ProfileNutritionSlice:
+      type: object
+      required:
+        - calorieTarget
+        - dietaryRestrictions
+      properties:
+        calorieTarget:
+          type: number
+        dietaryRestrictions:
+          type: array
+          items:
+            type: string
+        allergies:
+          type: array
+          items:
+            type: string
+
+    PlanItem:
+      type: object
+      required:
+        - id
+        - title
+        - dueAt
+        - completed
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        dueAt:
+          type: string
+          format: date-time
+        completed:
+          type: boolean
+
+    HabitItem:
+      type: object
+      required:
+        - id
+        - name
+        - completed
+        - streak
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        completed:
+          type: boolean
+        streak:
+          type: number
+
+    HabitDetail:
+      allOf:
+        - $ref: '#/components/schemas/HabitItem'
+        - type: object
+          properties:
+            frequency:
+              type: string
+            history:
+              type: array
+              items:
+                type: object
+
+    TimelineItem:
+      type: object
+      required:
+        - id
+        - type
+        - timestamp
+        - content
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        content:
+          type: object
+
+    MealSummary:
+      type: object
+      required:
+        - id
+        - name
+        - timestamp
+        - calories
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        calories:
+          type: number
+        macros:
+          type: object
+
+    GoalProgress:
+      type: object
+      required:
+        - current
+        - target
+        - percentage
+      properties:
+        current:
+          type: number
+        target:
+          type: number
+        percentage:
+          type: number
+
+    RewardsSummary:
+      type: object
+      required:
+        - points
+        - level
+        - streaks
+      properties:
+        points:
+          type: number
+        level:
+          type: number
+        streaks:
+          type: array
+          items:
+            type: object
+
+    StreakInfo:
+      type: object
+      required:
+        - habitId
+        - currentStreak
+        - longestStreak
+      properties:
+        habitId:
+          type: string
+        currentStreak:
+          type: number
+        longestStreak:
+          type: number
+
+    NotificationState:
+      type: object
+      required:
+        - unreadCount
+        - recent
+      properties:
+        unreadCount:
+          type: number
+        recent:
+          type: array
+          items:
+            type: object
+
+    AiInsightPack:
+      type: object
+      required:
+        - insights
+      properties:
+        insights:
+          type: array
+          items:
+            $ref: '#/components/schemas/AiInsight'
+
+    AiInsight:
+      type: object
+      required:
+        - id
+        - message
+        - confidence
+        - reasonCodes
+      properties:
+        id:
+          type: string
+        message:
+          type: string
+        actionable:
+          type: boolean
+        suggestedAction:
+          type: string
+        confidence:
+          type: number
+        reasonCodes:
+          type: array
+          items:
+            type: string
+
+  responses:
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiResponse'
+
+    Forbidden:
+      description: Insufficient permissions
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiResponse'
+
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiResponse'
