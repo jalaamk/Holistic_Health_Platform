@@ -3,7 +3,7 @@
  * Feature gating and quota management
  */
 
-import { Entitlements, Quota, TenantTier, RequestContext } from '../models/types';
+import { Entitlements, TenantTier, RequestContext } from '../models/types';
 
 export class EntitlementsService {
   /**

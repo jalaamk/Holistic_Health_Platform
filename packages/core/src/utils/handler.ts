@@ -4,7 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { z, ZodSchema } from 'zod';
+import { ZodSchema } from 'zod';
 import { v4 as uuidv4 } from 'uuid';
 import { RequestContext, ApiResponse, ApiError } from '../models/types';
 import { entitlementsService } from '../services/entitlements';
@@ -199,9 +199,9 @@ async function parseRequestBody(request: NextRequest): Promise<unknown> {
 }
 
 async function checkRateLimit(
-  userId: string,
-  windowMs: number,
-  maxRequests: number
+  _userId: string,
+  _windowMs: number,
+  _maxRequests: number
 ): Promise<boolean> {
   // Placeholder - would integrate with Redis or similar
   return true;
@@ -251,6 +251,7 @@ function logRequest(
   latencyMs: number
 ): void {
   // Structured logging
+  // eslint-disable-next-line no-console
   console.log(JSON.stringify({
     requestId: context.requestId,
     traceId: context.traceId,

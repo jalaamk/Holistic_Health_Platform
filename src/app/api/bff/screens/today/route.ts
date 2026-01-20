@@ -3,7 +3,6 @@
  * Returns all data needed to render the Today screen
  */
 
-import { NextRequest } from 'next/server';
 import { createHandler } from '@/packages/core/src/utils/handler';
 
 interface TodayViewModel {
