@@ -74,6 +74,7 @@ The project uses TypeScript with **strict mode** enabled to ensure type safety t
 ### ESLint
 
 ESLint is configured with:
+
 - Next.js recommended rules
 - TypeScript ESLint plugin
 - Prettier integration
@@ -101,4 +102,3 @@ All gates must pass before code can be merged.
 ## License
 
 This project is private and proprietary.
-
