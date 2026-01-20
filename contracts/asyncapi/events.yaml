@@ -1,0 +1,176 @@
+asyncapi: 2.6.0
+info:
+  title: WellnessOS Event Bus
+  version: 1.0.0
+  description: |
+    Event-driven architecture for WellnessOS.
+    All events follow a standard envelope format with taxonomy.
+
+channels:
+  spine.events:
+    description: Profile Spine events
+    publish:
+      message:
+        oneOf:
+          - $ref: '#/components/messages/SpineCreated'
+          - $ref: '#/components/messages/SpinePatchApplied'
+          - $ref: '#/components/messages/SpineComputedUpdated'
+
+  nutrition.events:
+    description: Nutrition domain events
+    publish:
+      message:
+        oneOf:
+          - $ref: '#/components/messages/MealLogged'
+          - $ref: '#/components/messages/MealUpdated'
+          - $ref: '#/components/messages/NutritionGoalSet'
+
+  habits.events:
+    description: Habits domain events
+    publish:
+      message:
+        oneOf:
+          - $ref: '#/components/messages/HabitCompleted'
+          - $ref: '#/components/messages/HabitCreated'
+
+  timeline.events:
+    description: Timeline projection events
+    publish:
+      message:
+        oneOf:
+          - $ref: '#/components/messages/TimelineItemAdded'
+
+  rewards.events:
+    description: Rewards system events
+    publish:
+      message:
+        oneOf:
+          - $ref: '#/components/messages/PointsEarned'
+          - $ref: '#/components/messages/StreakUpdated'
+
+components:
+  messages:
+    # Spine events
+    SpineCreated:
+      payload:
+        $ref: '#/components/schemas/EventEnvelope'
+      x-eventType: spine.created
+
+    SpinePatchApplied:
+      payload:
+        $ref: '#/components/schemas/EventEnvelope'
+      x-eventType: spine.patch.applied
+
+    SpineComputedUpdated:
+      payload:
+        $ref: '#/components/schemas/EventEnvelope'
+      x-eventType: spine.computed.updated
+
+    # Nutrition events
+    MealLogged:
+      payload:
+        $ref: '#/components/schemas/EventEnvelope'
+      x-eventType: nutrition.meal.logged
+
+    MealUpdated:
+      payload:
+        $ref: '#/components/schemas/EventEnvelope'
+      x-eventType: nutrition.meal.updated
+
+    NutritionGoalSet:
+      payload:
+        $ref: '#/components/schemas/EventEnvelope'
+      x-eventType: nutrition.goal.set
+
+    # Habits events
+    HabitCompleted:
+      payload:
+        $ref: '#/components/schemas/EventEnvelope'
+      x-eventType: habits.completed
+
+    HabitCreated:
+      payload:
+        $ref: '#/components/schemas/EventEnvelope'
+      x-eventType: habits.created
+
+    # Timeline events
+    TimelineItemAdded:
+      payload:
+        $ref: '#/components/schemas/EventEnvelope'
+      x-eventType: timeline.item.added
+
+    # Rewards events
+    PointsEarned:
+      payload:
+        $ref: '#/components/schemas/EventEnvelope'
+      x-eventType: rewards.points.earned
+
+    StreakUpdated:
+      payload:
+        $ref: '#/components/schemas/EventEnvelope'
+      x-eventType: rewards.streak.updated
+
+  schemas:
+    EventEnvelope:
+      type: object
+      required:
+        - eventId
+        - type
+        - occurredAt
+        - tenantId
+        - userId
+        - actor
+        - classification
+        - consentScope
+        - traceId
+        - data
+      properties:
+        eventId:
+          type: string
+          format: uuid
+          description: Unique event identifier
+        type:
+          type: string
+          description: Event type from the taxonomy
+        occurredAt:
+          type: string
+          format: date-time
+          description: When the event occurred
+        tenantId:
+          type: string
+          description: Tenant identifier
+        userId:
+          type: string
+          description: User identifier
+        actor:
+          $ref: '#/components/schemas/Actor'
+        classification:
+          type: string
+          enum: [public, internal, sensitive, phi]
+          description: Data classification level
+        consentScope:
+          type: string
+          description: Consent scope required for this event
+        traceId:
+          type: string
+          description: W3C trace ID for distributed tracing
+        metadata:
+          type: object
+          description: Additional metadata
+        data:
+          type: object
+          description: Event-specific payload
+
+    Actor:
+      type: object
+      required:
+        - type
+        - id
+      properties:
+        type:
+          type: string
+          enum: [user, system, pro, service]
+        id:
+          type: string
+        displayName:
+          type: string
